@@ -1,0 +1,110 @@
+import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_webservice/directions.dart';
+
+
+
+class UserLocationPlace extends StatefulWidget {
+  @override
+  _UserLocationPlaceState createState() => _UserLocationPlaceState();
+}
+
+class _UserLocationPlaceState extends State<UserLocationPlace> {
+  GoogleMapController _controller;
+  Position _currentPosition;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final DirectionsService _directionsService = DirectionsService();
+
+  LatLng _destinationLocation = LatLng(37.7749, -122.4194); // Sample destination coordinates
+
+
+  @override
+  void initState() {
+    super.initState();
+    _getCurrentLocation();
+  }
+
+  void _getCurrentLocation() async {
+    Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    setState(() {
+      _currentPosition = position;
+    });
+  }
+
+  void _calculateRoute() async {
+    if (_currentPosition != null && _destinationLocation != null) {
+      final directions = await _directionsService.route(
+        origin: Location(_currentPosition.latitude, _currentPosition.longitude),
+        destination: Location(_destinationLocation.latitude, _destinationLocation.longitude),
+        travelMode: TravelMode.driving,
+      );
+
+      if (directions.status == 'OK') {
+        final polyline = Polyline(
+          polylineId: PolylineId('route'),
+          color: Colors.blue,
+          points: _convertToLatLng(directions.routes[0].overviewPath),
+        );
+
+        setState(() {
+          _polylines.add(polyline);
+        });
+
+        // You can access the estimated time from `directions.routes[0].legs[0].duration`
+      }
+    }
+  }
+
+  Set<Polyline> _polylines = {};
+
+  List<LatLng> _convertToLatLng(List<LatLng> points) {
+    return points.map((point) => LatLng(point.lat, point.lng)).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      key: _scaffoldKey,
+      appBar: AppBar(
+        title: Text('Pipeline and Estimated Time'),
+      ),
+      body: Column(
+        children: <Widget>[
+          Container(
+            height: 300,
+            child: GoogleMap(
+              onMapCreated: (GoogleMapController controller) {
+                _controller = controller;
+              },
+              initialCameraPosition: CameraPosition(
+                target: _currentPosition != null
+                    ? LatLng(_currentPosition.latitude, _currentPosition.longitude)
+                    : LatLng(0, 0),
+                zoom: 12,
+              ),
+              markers: Set<Marker>.of([
+                Marker(
+                  markerId: MarkerId('Current Location'),
+                  position: LatLng(_currentPosition.latitude, _currentPosition.longitude),
+                  infoWindow: InfoWindow(title: 'Current Location'),
+                ),
+                if (_destinationLocation != null)
+                  Marker(
+                    markerId: MarkerId('Destination Location'),
+                    position: _destinationLocation,
+                    infoWindow: InfoWindow(title: 'Destination Location'),
+                  ),
+              ]),
+              polylines: _polylines,
+            ),
+          ),
+          ElevatedButton(
+            onPressed: _calculateRoute,
+            child: Text('Calculate Route'),
+          ),
+        ],
+      ),
+    );
+  }
+}
